@@ -37,7 +37,7 @@ class PB_app(QMainWindow):
         self.ui.stop_pulse_sequence.clicked.connect(self.pb_thread.stop_pulse_sequence)
         self.ui.clear_messages.clicked.connect(self.clear_messages)
 
-        #Connect message signal coming from pulseblaster class
+        #Connect message signals coming from pulse-blaster and pulse-sequence classes
         self.pb_thread.message.connect(self.message)
         self.pulse_sequence.ps_status.connect(self.status)
 
@@ -85,8 +85,8 @@ class PB_app(QMainWindow):
             display_num_of_pulses = pulse.pulses_in_train
             display_pulse_index = pulse.pulse_train_index
 
-            self.ui.pulses_in_sequence.append("Pulse: [index: %s, On: %s, width: %s, "
-                                              "separation: %s, num_of_pulses: %s, channels: "
+            self.ui.pulses_in_sequence.append("Pulse: [Index: %s, On_Time: %s, Width: %s, "
+                                              "Separation: %s, Num_of_pulses: %s, Channels: "
                                               "%s]" % (display_pulse_index, display_time_on, display_width,
                                                        display_sep_val, display_num_of_pulses, display_channels))
 
@@ -117,6 +117,9 @@ class PB_app(QMainWindow):
         except:
             self.ui.status.append("Instructions not generated")
 
+    def status(self,text):
+        self.ui.status.append(text)
+
     def clear_status(self):
         self.ui.status.clear()
 
@@ -125,11 +128,6 @@ class PB_app(QMainWindow):
 
     def clear_messages(self):
         self.ui.messages.clear()
-
-    def status(self,text):
-        self.ui.status.append(text)
-
-
 
 
 class CommunicateWithPB(QtCore.QThread):
@@ -234,10 +232,6 @@ class CommunicateWithPB(QtCore.QThread):
         else:
             error = pb_get_error()
             self.message.emit(error)
-
-
-
-
 
 
 if __name__ == '__main__':
