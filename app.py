@@ -17,8 +17,8 @@ class PB_app(QMainWindow):
 
         #Instantiate required classes, start threads, and create required instruction list which will be filled later
         self.pulse_sequence = PulseSequence()
-        self.instructions = []
         self.pb_thread = CommunicateWithPB()
+        self.instructions = []
 
         #Connect PB_app GUI buttons for pulse train generator tab
         self.ui.add_pulse_train.clicked.connect(self.add_pulse_train)
