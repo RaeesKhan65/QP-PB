@@ -258,11 +258,11 @@ class PulseSequence(QtCore.QThread):
         left_over = time - delay_num * LONG_DELAY_STEP
 
         while left_over <= 12.5:
-            LONG_DELAY_STEP = 500 * ns + 2.5
+            LONG_DELAY_STEP = LONG_DELAY_STEP + 2.5
             delay_num = int(time / LONG_DELAY_STEP)
             left_over = time - delay_num * LONG_DELAY_STEP
 
-            if(LONG_DELAY_STEP>630):
+            if(LONG_DELAY_STEP>self.max_instr_length):
                 self.ps_status.emit("Problem in long pulse function")
                 raise Exception("Problem in long pulse function")
 
