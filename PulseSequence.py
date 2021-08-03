@@ -51,6 +51,7 @@ class PulseSequence(QtCore.QThread):
         self.min_pulse_length = (1/400)*1000
         self.min_instr_length = 5*self.min_pulse_length
         self.max_instr_length = 630.0
+        self.max_num_in_long_delay = 500000
         self.num_of_pulse_trains = 0
         self.pulse_train_index = 0
         self.pulse_trains = []
@@ -266,11 +267,17 @@ class PulseSequence(QtCore.QThread):
                 self.ps_status.emit("Problem in long pulse function")
                 raise Exception("Problem in long pulse function")
 
+        if(delay_num>self.max_num_in_long_delay):
+            multiplier = int(delay_num/self.max_num_in_long_delay)
+            delay_num = delay_num-multiplier*self.max_num_in_long_delay
+        else:
+            multiplier = 0
+
         for channel in channels:
             loc |= 2 ** channel
         hex_val = "0x%X" % loc
 
-        return (LONG_DELAY_STEP, delay_num, left_over, hex_val)
+        return (LONG_DELAY_STEP, delay_num,multiplier, left_over, hex_val)
 
 
     def set_first_sequence_event(self):
@@ -316,9 +323,15 @@ class PulseSequence(QtCore.QThread):
                 instructions.append("0x000000, CONTINUE, 0, %s" % (self.first_sequence_event))
 
             elif(self.first_sequence_event > self.max_instr_length):
-                LONG_DELAY_STEP, delay_num, left_over,_ = self.long_pulse(time=self.first_sequence_event,channels=[])
+                LONG_DELAY_STEP, delay_num,multiplier, left_over,_ = self.long_pulse(time=self.first_sequence_event,channels=[])
 
-                instructions.append("0x000000, LONG_DELAY, %s, %s" % (delay_num,LONG_DELAY_STEP))
+                if(multiplier>0):
+                    for i in range(multiplier):
+                        instructions.append("0x000000, LONG_DELAY, %s, %s" % (self.max_num_in_long_delay,LONG_DELAY_STEP))
+
+                if(delay_num>0):
+                    instructions.append("0x000000, LONG_DELAY, %s, %s" % (delay_num,LONG_DELAY_STEP))
+
                 instructions.append("0x000000, CONTINUE, 0, %s" % (left_over))
 
             else:
@@ -346,9 +359,15 @@ class PulseSequence(QtCore.QThread):
                         instructions.append("0x000000, CONTINUE, 0, %s" % (off_time))
 
                     elif (off_time > self.max_instr_length):
-                        LONG_DELAY_STEP, delay_num, left_over, _ = self.long_pulse(time=off_time, channels=[])
+                        LONG_DELAY_STEP, delay_num, multiplier, left_over, _ = self.long_pulse(time=off_time, channels=[])
 
-                        instructions.append("0x000000, LONG_DELAY, %s, %s" % (delay_num, LONG_DELAY_STEP))
+                        if (multiplier > 0):
+                            for i in range(multiplier):
+                                instructions.append("0x000000, LONG_DELAY, %s, %s" % (self.max_num_in_long_delay, LONG_DELAY_STEP))
+
+                        if(delay_num>0):
+                            instructions.append("0x000000, LONG_DELAY, %s, %s" % (delay_num, LONG_DELAY_STEP))
+
                         instructions.append("0x000000, CONTINUE, 0, %s" % (left_over))
 
 
@@ -379,10 +398,17 @@ class PulseSequence(QtCore.QThread):
                 new_time = separation-time_alr_off
 
                 hex_val_width = self.small_pulse(time=width, channels=channels)
-                LONG_DELAY_STEP, delay_num, left_over, _ = self.long_pulse(time=new_time, channels=channels)
+                LONG_DELAY_STEP, delay_num,multiplier, left_over, _ = self.long_pulse(time=new_time, channels=channels)
 
                 instructions.append("%s, LOOP, %s, 12.5" % (hex_val_width, num_of_pulses))
-                instructions.append("0x000000, LONG_DELAY, %s,%s" % (delay_num, LONG_DELAY_STEP))
+
+                if (multiplier > 0):
+                    for i in range(multiplier):
+                        instructions.append("0x000000, LONG_DELAY, %s, %s" % (self.max_num_in_long_delay, LONG_DELAY_STEP))
+
+                if(delay_num>0):
+                    instructions.append("0x000000, LONG_DELAY, %s,%s" % (delay_num, LONG_DELAY_STEP))
+
                 instructions.append("0x000000, END_LOOP, loop, %s" % (left_over))
 
             elif (width <= self.max_instr_length and width >= self.min_instr_length and separation < self.min_instr_length):
@@ -402,11 +428,18 @@ class PulseSequence(QtCore.QThread):
                 time_alr_on = self.min_instr_length - separation
                 new_time = width - time_alr_on
 
-                LONG_DELAY_STEP, delay_num, left_over, hex_val_width = self.long_pulse(time=new_time, channels=channels)
+                LONG_DELAY_STEP, delay_num,multiplier, left_over, hex_val_width = self.long_pulse(time=new_time, channels=channels)
                 hex_val_sep = self.small_pulse(time=time_alr_on, channels=channels)
 
                 instructions.append("%s,LOOP,%s,%s" % (hex_val_width, num_of_pulses, left_over))
-                instructions.append("%s,LONG_DELAY,%s,%s" % (hex_val_width, delay_num, LONG_DELAY_STEP))
+
+                if(multiplier>0):
+                    for i in range(multiplier):
+                        instructions.append("%s,LONG_DELAY,%s,%s" % (hex_val_width, self.max_num_in_long_delay, LONG_DELAY_STEP))
+
+                if(delay_num>0):
+                    instructions.append("%s,LONG_DELAY,%s,%s" % (hex_val_width, delay_num, LONG_DELAY_STEP))
+
                 instructions.append("%s,END_LOOP,loop,12.5" % (hex_val_sep))
 
 
@@ -420,33 +453,60 @@ class PulseSequence(QtCore.QThread):
 
             elif (width > self.max_instr_length and separation <= self.max_instr_length and separation >= self.min_instr_length):
 
-                LONG_DELAY_STEP, delay_num, left_over, hex_val_width = self.long_pulse(time=width, channels=channels)
+                LONG_DELAY_STEP, delay_num,multiplier, left_over, hex_val_width = self.long_pulse(time=width, channels=channels)
 
                 instructions.append("%s,LOOP,%s,%s" % (hex_val_width, num_of_pulses, left_over))
-                instructions.append("%s,LONG_DELAY,%s,%s" % (hex_val_width, delay_num, LONG_DELAY_STEP))
+
+                if(multiplier>0):
+                    for i in range(multiplier):
+                        instructions.append("%s,LONG_DELAY,%s,%s" % (hex_val_width, self.max_num_in_long_delay, LONG_DELAY_STEP))
+
+                if (delay_num>0):
+                    instructions.append("%s,LONG_DELAY,%s,%s" % (hex_val_width, delay_num, LONG_DELAY_STEP))
+
                 instructions.append("0x000000, END_LOOP, loop, %s" % (separation))
 
 
             elif (width <= self.max_instr_length and width >= self.min_instr_length and separation > self.max_instr_length):
 
                 hex_val_width = self.normal_pulse(channels=channels)
-                LONG_DELAY_STEP, delay_num, left_over, _ = self.long_pulse(time=separation, channels=channels)
+                LONG_DELAY_STEP, delay_num,multiplier, left_over, _ = self.long_pulse(time=separation, channels=channels)
 
                 instructions.append("%s, LOOP, %s, %s" % (hex_val_width, num_of_pulses, width))
-                instructions.append("0x000000, LONG_DELAY, %s,%s" % (delay_num, LONG_DELAY_STEP))
+
+                if(multiplier>0):
+                    for i in range(multiplier):
+                        instructions.append("0x000000, LONG_DELAY, %s,%s" % (self.max_num_in_long_delay, LONG_DELAY_STEP))
+
+                if(delay_num>0):
+                    instructions.append("0x000000, LONG_DELAY, %s,%s" % (delay_num, LONG_DELAY_STEP))
+
                 instructions.append("0x000000, END_LOOP, loop, %s" % (left_over))
 
 
             elif (width > self.max_instr_length and separation > self.max_instr_length):
 
-                LONG_DELAY_STEP_hi, delay_num_hi, left_over_hi, hex_val_width = self.long_pulse(time=width,
+                LONG_DELAY_STEP_hi, delay_num_hi, multiplier_hi, left_over_hi, hex_val_width = self.long_pulse(time=width,
                                                                                                 channels=channels)
-                LONG_DELAY_STEP_lo, delay_num_lo, left_over_lo, _ = self.long_pulse(time=separation, channels=channels)
+                LONG_DELAY_STEP_lo, delay_num_lo, multiplier_lo, left_over_lo, _ = self.long_pulse(time=separation, channels=channels)
 
                 instructions.append("%s, LOOP, %s, %s" % (hex_val_width, num_of_pulses, left_over_hi))
-                instructions.append("%s, LONG_DELAY, %s,%s" % (hex_val_width, delay_num_hi, LONG_DELAY_STEP_hi))
 
-                instructions.append("0x000000, LONG_DELAY, %s,%s" % (delay_num_lo, LONG_DELAY_STEP_lo))
+                if(multiplier_hi>0):
+                    for i in range(multiplier_hi):
+                        instructions.append("%s, LONG_DELAY, %s,%s" % (hex_val_width, self.max_num_in_long_delay, LONG_DELAY_STEP_hi))
+
+                if(delay_num_hi>0):
+                    instructions.append("%s, LONG_DELAY, %s,%s" % (hex_val_width, delay_num_hi, LONG_DELAY_STEP_hi))
+
+
+                if(multiplier_lo>0):
+                    for i in range(multiplier_lo):
+                        instructions.append("0x000000, LONG_DELAY, %s,%s" % (self.max_num_in_long_delay, LONG_DELAY_STEP_lo))
+
+                if(delay_num_lo>0):
+                    instructions.append("0x000000, LONG_DELAY, %s,%s" % (delay_num_lo, LONG_DELAY_STEP_lo))
+
                 instructions.append("0x000000, END_LOOP, loop, %s" % (left_over_lo))
 
 
